@@ -1,32 +1,41 @@
+//go:build linux
 // +build linux
 
 package lumberjack
 
 import (
+	"io/fs"
 	"os"
 	"syscall"
 	"testing"
 	"time"
 )
 
-func TestMaintainMode(t *testing.T) {
+func testMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	currentTime = fakeTime
-	dir := makeTempDir("TestMaintainMode", t)
+	dir := t.TempDir()
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
 
 	mode := os.FileMode(0600)
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
-	isNil(err, t)
-	f.Close()
-
 	l := &Logger{
 		Filename:   filename,
 		MaxBackups: 1,
 		MaxSize:    100, // megabytes
+		FileMode:   fileMode,
 	}
 	defer l.Close()
+
+	// If custom file mode is set then use it.
+	if l.fileModeIsSet() {
+		mode = l.FileMode
+	}
+
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
+	isNil(err, t)
+	f.Close()
+
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
@@ -44,6 +53,26 @@ func TestMaintainMode(t *testing.T) {
 	isNil(err, t)
 	equals(mode, info.Mode(), t)
 	equals(mode, info2.Mode(), t)
+}
+
+func TestMaintainModeRestricted(t *testing.T) {
+	testMaintainMode(t, os.FileMode(0600))
+}
+
+func TestMaintainModeCustom(t *testing.T) {
+	testMaintainMode(t, os.FileMode(0644))
+}
+
+// This file mode is invalid not set, test should fallback
+// to default file mode.
+func TestMaintainModeEmpty(t *testing.T) {
+	testMaintainMode(t, os.FileMode(0000))
+}
+
+// This file mode is invalid not set, test should fallback
+// to default file mode.
+func TestMaintainModeZero(t *testing.T) {
+	testMaintainMode(t, 0)
 }
 
 func TestMaintainOwner(t *testing.T) {
@@ -84,26 +113,33 @@ func TestMaintainOwner(t *testing.T) {
 	equals(666, fakeFS.files[filename].gid, t)
 }
 
-func TestCompressMaintainMode(t *testing.T) {
+func testCompressMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	currentTime = fakeTime
 
-	dir := makeTempDir("TestCompressMaintainMode", t)
+	dir := t.TempDir()
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
 
 	mode := os.FileMode(0600)
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
-	isNil(err, t)
-	f.Close()
-
 	l := &Logger{
 		Compress:   true,
 		Filename:   filename,
 		MaxBackups: 1,
 		MaxSize:    100, // megabytes
+		FileMode:   fileMode,
 	}
 	defer l.Close()
+
+	// If custom file mode is set then use it.
+	if l.fileModeIsSet() {
+		mode = l.FileMode
+	}
+
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
+	isNil(err, t)
+	f.Close()
+
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
@@ -127,6 +163,26 @@ func TestCompressMaintainMode(t *testing.T) {
 	isNil(err, t)
 	equals(mode, info.Mode(), t)
 	equals(mode, info2.Mode(), t)
+}
+
+func TestCompressMaintainModeRestricted(t *testing.T) {
+	testCompressMaintainMode(t, os.FileMode(0600))
+}
+
+func TestCompressMaintainModeCustom(t *testing.T) {
+	testCompressMaintainMode(t, os.FileMode(0644))
+}
+
+// This file mode is invalid not set, test should fallback
+// to default file mode.
+func TestCompressMaintainModeEmpty(t *testing.T) {
+	testCompressMaintainMode(t, os.FileMode(0000))
+}
+
+// This file mode is invalid not set, test should fallback
+// to default file mode.
+func TestCompressMaintainModeZero(t *testing.T) {
+	testCompressMaintainMode(t, 0)
 }
 
 func TestCompressMaintainOwner(t *testing.T) {
@@ -171,8 +227,8 @@ func TestCompressMaintainOwner(t *testing.T) {
 	// a compressed version of the log file should now exist with the correct
 	// owner.
 	filename2 := backupFile(dir)
-	equals(555, fakeFS.files[filename2+compressSuffix].uid, t)
-	equals(666, fakeFS.files[filename2+compressSuffix].gid, t)
+	equals(555, fakeFS.files[filename2+compressSuffix+tmpSuffix].uid, t)
+	equals(666, fakeFS.files[filename2+compressSuffix+tmpSuffix].gid, t)
 }
 
 type fakeFile struct {
@@ -202,4 +258,37 @@ func (fs *fakeFS) Stat(name string) (os.FileInfo, error) {
 	stat.Uid = 555
 	stat.Gid = 666
 	return info, nil
+}
+
+func TestFileModeIsSet(t *testing.T) {
+	type testCase struct {
+		fileMode fs.FileMode
+		isSet    bool
+	}
+
+	testCases := []testCase{
+		{
+			fileMode: os.FileMode(0600),
+			isSet:    true,
+		},
+		{
+			fileMode: os.FileMode(0644),
+			isSet:    true,
+		},
+		{
+			fileMode: os.FileMode(0000),
+			isSet:    false,
+		},
+		{
+			fileMode: 0,
+			isSet:    false,
+		},
+	}
+
+	for _, c := range testCases {
+		l := &Logger{
+			FileMode: c.fileMode,
+		}
+		equals(c.isSet, l.fileModeIsSet(), t)
+	}
 }
