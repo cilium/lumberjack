@@ -113,26 +113,33 @@ func TestMaintainOwner(t *testing.T) {
 	equals(666, fakeFS.files[filename].gid, t)
 }
 
-func TestCompressMaintainMode(t *testing.T) {
+func testCompressMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	currentTime = fakeTime
 
-	dir := makeTempDir("TestCompressMaintainMode", t)
+	dir := t.TempDir()
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
 
 	mode := os.FileMode(0600)
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
-	isNil(err, t)
-	f.Close()
-
 	l := &Logger{
 		Compress:   true,
 		Filename:   filename,
 		MaxBackups: 1,
 		MaxSize:    100, // megabytes
+		FileMode:   fileMode,
 	}
 	defer l.Close()
+
+	// If custom file mode is set then use it.
+	if l.fileModeIsSet() {
+		mode = l.FileMode
+	}
+
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
+	isNil(err, t)
+	f.Close()
+
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
@@ -156,6 +163,26 @@ func TestCompressMaintainMode(t *testing.T) {
 	isNil(err, t)
 	equals(mode, info.Mode(), t)
 	equals(mode, info2.Mode(), t)
+}
+
+func TestCompressMaintainModeRestricted(t *testing.T) {
+	testCompressMaintainMode(t, os.FileMode(0600))
+}
+
+func TestCompressMaintainModeCustom(t *testing.T) {
+	testCompressMaintainMode(t, os.FileMode(0644))
+}
+
+// This file mode is invalid not set, test should fallback
+// to default file mode.
+func TestCompressMaintainModeEmpty(t *testing.T) {
+	testCompressMaintainMode(t, os.FileMode(0000))
+}
+
+// This file mode is invalid not set, test should fallback
+// to default file mode.
+func TestCompressMaintainModeZero(t *testing.T) {
+	testCompressMaintainMode(t, 0)
 }
 
 func TestCompressMaintainOwner(t *testing.T) {
