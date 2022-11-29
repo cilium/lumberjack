@@ -507,18 +507,17 @@ func compressLogFile(src, dst string) (err error) {
 		return err
 	}
 
-	// Flush the gz writer before Sync()ing
-	if err := gz.Flush(); err != nil {
+	// Close the gzip writer.
+	// Closing also triggers a Flush to the underlying
+	// io.Writer, and doesnot close the underlying io.Writer.
+	// We must Close() or Flush() the gz writer before Sync()ing otherwise we may
+	// see partially written data and a corrupt gzip archive.
+	if err := gz.Close(); err != nil {
 		return err
 	}
 
 	// fsync is important, otherwise os.Rename could rename a zero-length file
 	if err := gzf.Sync(); err != nil {
-		return err
-	}
-
-	// Close the gzip writer
-	if err := gz.Close(); err != nil {
 		return err
 	}
 
