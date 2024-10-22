@@ -18,7 +18,6 @@ func testMaintainMode(t *testing.T, fileMode fs.FileMode) {
 
 	filename := logFile(dir)
 
-	mode := os.FileMode(0600)
 	l := &Logger{
 		Filename:   filename,
 		MaxBackups: 1,
@@ -27,6 +26,7 @@ func testMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	}
 	defer l.Close()
 
+	mode := defaultFileMode
 	// If custom file mode is set then use it.
 	if l.fileModeIsSet() {
 		mode = l.FileMode
@@ -89,7 +89,7 @@ func TestMaintainOwner(t *testing.T) {
 
 	filename := logFile(dir)
 
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, defaultFileMode)
 	isNil(err, t)
 	f.Close()
 
@@ -121,7 +121,6 @@ func testCompressMaintainMode(t *testing.T, fileMode fs.FileMode) {
 
 	filename := logFile(dir)
 
-	mode := os.FileMode(0600)
 	l := &Logger{
 		Compress:   true,
 		Filename:   filename,
@@ -131,6 +130,7 @@ func testCompressMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	}
 	defer l.Close()
 
+	mode := defaultFileMode
 	// If custom file mode is set then use it.
 	if l.fileModeIsSet() {
 		mode = l.FileMode
@@ -199,7 +199,7 @@ func TestCompressMaintainOwner(t *testing.T) {
 
 	filename := logFile(dir)
 
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, defaultFileMode)
 	isNil(err, t)
 	f.Close()
 

@@ -132,6 +132,8 @@ var (
 	// variable so tests can mock it out and not need to write megabytes of data
 	// to disk.
 	megabyte = 1024 * 1024
+
+	defaultFileMode = os.FileMode(0644)
 )
 
 // Write implements io.Writer.  If a write would cause the log file to be larger
@@ -218,8 +220,7 @@ func (l *Logger) openNew() error {
 	}
 
 	name := l.filename()
-	mode := os.FileMode(0644)
-
+	mode := defaultFileMode
 	if l.fileModeIsSet() {
 		mode = l.FileMode
 	}
@@ -288,7 +289,7 @@ func (l *Logger) openExistingOrNew(writeLen int) error {
 		return l.rotate()
 	}
 
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, defaultFileMode)
 	if err != nil {
 		// if we fail to open the old log file for some reason, just ignore
 		// it and open a new log file.
