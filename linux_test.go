@@ -18,7 +18,6 @@ func testMaintainMode(t *testing.T, fileMode fs.FileMode) {
 
 	filename := logFile(dir)
 
-	mode := os.FileMode(0600)
 	l := &Logger{
 		Filename:   filename,
 		MaxBackups: 1,
@@ -27,6 +26,7 @@ func testMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	}
 	defer l.Close()
 
+	mode := defaultFileMode
 	// If custom file mode is set then use it.
 	if l.fileModeIsSet() {
 		mode = l.FileMode
@@ -89,7 +89,7 @@ func TestMaintainOwner(t *testing.T) {
 
 	filename := logFile(dir)
 
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, defaultFileMode)
 	isNil(err, t)
 	f.Close()
 
@@ -121,7 +121,6 @@ func testCompressMaintainMode(t *testing.T, fileMode fs.FileMode) {
 
 	filename := logFile(dir)
 
-	mode := os.FileMode(0600)
 	l := &Logger{
 		Compress:   true,
 		Filename:   filename,
@@ -131,6 +130,7 @@ func testCompressMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	}
 	defer l.Close()
 
+	mode := defaultFileMode
 	// If custom file mode is set then use it.
 	if l.fileModeIsSet() {
 		mode = l.FileMode
@@ -199,7 +199,7 @@ func TestCompressMaintainOwner(t *testing.T) {
 
 	filename := logFile(dir)
 
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0644)
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, defaultFileMode)
 	isNil(err, t)
 	f.Close()
 
@@ -291,4 +291,69 @@ func TestFileModeIsSet(t *testing.T) {
 		}
 		equals(c.isSet, l.fileModeIsSet(), t)
 	}
+}
+
+func testChangeModeOnRotate(t *testing.T, oldMode fs.FileMode, newMode fs.FileMode) {
+	currentTime = fakeTime
+	dir := t.TempDir()
+	defer os.RemoveAll(dir)
+
+	// create logger
+	filename := logFile(dir)
+	l := &Logger{
+		Filename:   filename,
+		MaxBackups: 1,
+		MaxSize:    100, // megabytes
+		FileMode:   oldMode,
+	}
+	defer l.Close()
+
+	// create file
+	mode := defaultFileMode
+	if l.fileModeIsSet() {
+		mode = l.FileMode
+	}
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, mode)
+	isNil(err, t)
+	f.Close()
+
+	// change logger file mode
+	l.FileMode = newMode
+
+	// write something to the file
+	b := []byte("boo!")
+	n, err := l.Write(b)
+	isNil(err, t)
+	equals(len(b), n, t)
+
+	// check that file permissions didn't change
+	info, err := os.Stat(filename)
+	isNil(err, t)
+	equals(mode, info.Mode(), t)
+
+	// rotate the file
+	newFakeTime()
+	err = l.Rotate()
+	isNil(err, t)
+
+	// check permissions for the rotated file
+	rotatedFilename := backupFile(dir)
+	rotatedInfo, err := os.Stat(rotatedFilename)
+	isNil(err, t)
+	equals(mode, rotatedInfo.Mode(), t)
+	// check permissions for the new file
+	expected := oldMode
+	if l.fileModeIsSet() {
+		expected = l.FileMode
+	}
+	info, err = os.Stat(filename)
+	isNil(err, t)
+	equals(expected, info.Mode(), t)
+}
+
+func TestChangeModeOnRotate(t *testing.T) {
+	testChangeModeOnRotate(t, 0600, 0644)
+	testChangeModeOnRotate(t, 0644, 0600)
+	testChangeModeOnRotate(t, 0000, 0640)
+	testChangeModeOnRotate(t, 0640, 0000)
 }
