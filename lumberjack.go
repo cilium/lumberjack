@@ -227,8 +227,10 @@ func (l *Logger) openNew() error {
 
 	info, err := osStat(name)
 	if err == nil {
-		// Copy the mode off the old logfile.
-		mode = info.Mode()
+		// If file mode is not set, use the mode of the existing file.
+		if !l.fileModeIsSet() {
+			mode = info.Mode()
+		}
 		// move the existing file
 		newname := backupName(name, l.LocalTime)
 		if err := os.Rename(name, newname); err != nil {
@@ -236,7 +238,7 @@ func (l *Logger) openNew() error {
 		}
 
 		// this is a no-op anywhere but linux
-		if err := chown(name, info); err != nil {
+		if err := chownWithMode(name, info, mode); err != nil {
 			return err
 		}
 	}
