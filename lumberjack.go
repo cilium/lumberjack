@@ -166,6 +166,12 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 
 	n, err = l.file.Write(p)
 	l.size += int64(n)
+	if err != nil {
+		// Drop the current file handle after write errors so the next Write can
+		// reopen the target file. This lets transient errors such as ENOSPC
+		// recover without requiring applications to recreate the Logger.
+		_ = l.close()
+	}
 
 	return n, err
 }

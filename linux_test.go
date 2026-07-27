@@ -4,8 +4,10 @@
 package lumberjack
 
 import (
+	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
@@ -53,6 +55,35 @@ func testMaintainMode(t *testing.T, fileMode fs.FileMode) {
 	isNil(err, t)
 	equals(mode, info.Mode(), t)
 	equals(mode, info2.Mode(), t)
+}
+
+func TestWriteErrorClosesCurrentFile(t *testing.T) {
+	dir := t.TempDir()
+	filename := filepath.Join(dir, "test.log")
+
+	f, err := os.OpenFile("/dev/full", os.O_WRONLY, defaultFileMode)
+	isNil(err, t)
+
+	l := &Logger{
+		Filename: filename,
+		file:     f,
+	}
+	defer l.Close()
+
+	b := []byte("boo!")
+	n, err := l.Write(b)
+	equals(0, n, t)
+	if !errors.Is(err, syscall.ENOSPC) {
+		t.Fatalf("expected ENOSPC, got %v", err)
+	}
+	if l.file != nil {
+		t.Fatal("expected logger to close and clear file after write error")
+	}
+
+	n, err = l.Write(b)
+	isNil(err, t)
+	equals(len(b), n, t)
+	existsWithContent(filename, b, t)
 }
 
 func TestMaintainModeRestricted(t *testing.T) {
